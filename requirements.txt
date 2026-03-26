@@ -1,4 +1,2 @@
 opencv-python>=4.10.0
 numpy>=1.26.0
-
-# py -3.13 -m src.app
