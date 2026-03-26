@@ -57,35 +57,7 @@ class PhoneDetector:
         self.net.setInput(blob)
         outputs = self.net.forward(self.output_layer_names)
 
-        boxes: list[list[int]] = []
-        confidences: list[float] = []
-
-        for output in outputs:
-            for detection in output:
-                scores = detection[5:]
-                class_id = int(np.argmax(scores))
-                confidence = float(scores[class_id])
-
-                if class_id != self.phone_class_id:
-                    continue
-                if confidence < self.confidence_threshold:
-                    continue
-
-                center_x = int(detection[0] * width)
-                center_y = int(detection[1] * height)
-                w = int(detection[2] * width)
-                h = int(detection[3] * height)
-
-                x = max(0, center_x - (w // 2))
-                y = max(0, center_y - (h // 2))
-                w = min(w, width - x)
-                h = min(h, height - y)
-
-                if w <= 0 or h <= 0:
-                    continue
-
-                boxes.append([x, y, w, h])
-                confidences.append(confidence)
+        boxes, confidences = self._extract_phone_candidates(outputs, width=width, height=height)
 
         if not boxes:
             return []
@@ -110,6 +82,54 @@ class PhoneDetector:
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
         return detections
+
+    def _extract_phone_candidates(
+        self,
+        outputs,
+        width: int,
+        height: int,
+    ) -> tuple[list[list[int]], list[float]]:
+        boxes: list[list[int]] = []
+        confidences: list[float] = []
+
+        for output in outputs:
+            for detection in output:
+                candidate = self._candidate_from_detection(detection, width=width, height=height)
+                if candidate is None:
+                    continue
+                box, confidence = candidate
+                boxes.append(box)
+                confidences.append(confidence)
+
+        return boxes, confidences
+
+    def _candidate_from_detection(
+        self,
+        detection,
+        width: int,
+        height: int,
+    ) -> tuple[list[int], float] | None:
+        scores = detection[5:]
+        class_id = int(np.argmax(scores))
+        confidence = float(scores[class_id])
+
+        if class_id != self.phone_class_id or confidence < self.confidence_threshold:
+            return None
+
+        center_x = int(detection[0] * width)
+        center_y = int(detection[1] * height)
+        w = int(detection[2] * width)
+        h = int(detection[3] * height)
+
+        x = max(0, center_x - (w // 2))
+        y = max(0, center_y - (h // 2))
+        w = min(w, width - x)
+        h = min(h, height - y)
+
+        if w <= 0 or h <= 0:
+            return None
+
+        return [x, y, w, h], confidence
 
     def _ensure_model_files(self) -> None:
         files_to_download = [

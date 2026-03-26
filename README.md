@@ -1,33 +1,28 @@
 # FocusGuard (OpenCV + Python)
 
-FocusGuard is a real-time webcam monitor that detects:
+FocusGuard is a real-time webcam monitor for this specific rule:
 
-- Face
-- Eyes
-- Smile
-- Lips
-
-And adds a behavior rule:
-
-- If the user appears focused on the screen continuously for 3-4 seconds, trigger a warning/alarm.
+- Detect a phone in the camera view.
+- Detect your face.
+- If you appear to be looking at that phone continuously for more than 4 seconds, play a beep warning.
 
 ## How It Works
 
-The app combines feature detection with a time-based attention heuristic.
+The app now uses a phone-first pipeline.
 
 Detection layer:
 
-- Face, eyes, smile: OpenCV Haar cascades.
-- Lips: lower-face HSV color segmentation.
+- Face, eyes, smile, lips: OpenCV Haar/lip heuristics.
+- Phone: YOLOv4-tiny (COCO class: `cell phone`) through OpenCV DNN.
 
-Attention layer:
+Phone-looking layer:
 
-- Pick the primary face (largest face box).
-- Confirm at least one eye is detected inside that face.
-- Check if the face center is in a central window of the frame.
-- If all true continuously for threshold seconds (default 3.5s), fire warning/alarm.
+- Select primary face (largest face box).
+- Select primary phone (highest-confidence phone box).
+- Consider user "looking at phone" when phone is below the face and horizontally close to it.
+- If this condition continues for threshold seconds (default 4.0s), fire a beep alert.
 
-This is a practical heuristic, not a medical-grade gaze estimator.
+Note: this is still a heuristic for "looking at phone" from webcam geometry.
 
 ## Project Structure
 
@@ -39,12 +34,12 @@ FocusGuard/
   src/
     app.py
     attention/
-      ATTENTION_LOGIC.md
       __init__.py
       screen_attention_monitor.py
     detectors/
       __init__.py
       haar_feature_detector.py
+      phone_detector.py
     utils/
       __init__.py
       drawing.py
@@ -58,33 +53,33 @@ FocusGuard/
 py -3.13 -m pip install -r requirements.txt
 ```
 
+On first run, model files are downloaded automatically to `models/yolo/`.
+
 ## Run
 
-Basic:
+Basic run:
 
 ```powershell
 py -3.13 -m src.app
 ```
 
-Custom camera and threshold:
+Custom camera and thresholds:
 
 ```powershell
-py -3.13 -m src.app --camera 0 --width 1280 --height 720 --attention-threshold 3.5 --center-ratio 0.62
+py -3.13 -m src.app --camera 0 --width 1280 --height 720 --phone-threshold 4.0 --phone-confidence 0.35
 ```
 
 ## Runtime Display
 
 - Bounding boxes for face, eyes, smile, and lips.
-- Focus timer overlay, for example: `Focus timer: 2.8s / 3.5s`.
-- State text, for example: `Focused`, `No face`, `Eyes not visible`, `Face off-center`.
+- Phone timer overlay, for example: `Phone timer: 2.8s / 4.0s`.
+- State text, for example: `Looking at phone`, `No phone`, `No face`, `Phone too far from face`.
 - Alarm when threshold is crossed.
 
 ## Tunable Parameters
 
-- `--attention-threshold`: seconds before warning, default `3.5`.
-- `--center-ratio`: central valid area size, default `0.62`.
-  - Smaller value = stricter center constraint.
-  - Larger value = more tolerant head position.
+- `--phone-threshold`: seconds before warning, default `4.0`.
+- `--phone-confidence`: detector confidence threshold, default `0.35`.
 
 ## Platform Note
 
@@ -99,9 +94,5 @@ py -3.13 -m src.app --camera 0 --width 1280 --height 720 --attention-threshold 3
 
 - Use good front lighting for stable face/eye detection.
 - Keep camera at eye level.
-- Increase `--attention-threshold` if alerts fire too quickly.
-- Increase `--center-ratio` if alerts miss when you are slightly off-center.
-
-## Internal Docs
-
-- Attention logic details: `src/attention/ATTENTION_LOGIC.md`
+- Increase `--phone-threshold` if alerts fire too quickly.
+- Reduce `--phone-confidence` slightly if phone is missed often.
